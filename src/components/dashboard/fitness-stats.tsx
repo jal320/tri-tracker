@@ -1,3 +1,51 @@
+'use client'
+
+import { useState } from 'react'
+
+const TOOLTIPS: Record<string, string> = {
+  CTL: 'Chronic Training Load — your long-term fitness built over ~42 days. Higher = more fit.',
+  ATL: 'Acute Training Load — your short-term fatigue from the last ~7 days. Higher = more tired.',
+  TSB: 'Training Stress Balance — fitness minus fatigue (CTL minus ATL). Positive = fresh, negative = fatigued.',
+  'Weekly TSS': 'Training Stress Score — total training load this week across all sports.',
+}
+
+function InfoIcon({ label }: { label: string }) {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', marginLeft: '5px' }}>
+      <div
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        style={{
+          width: '14px', height: '14px', borderRadius: '50%',
+          border: '1px solid var(--color-text-3)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '9px', fontWeight: 600, color: 'var(--color-text-3)',
+          cursor: 'default', lineHeight: 1, verticalAlign: 'middle',
+        }}
+      >
+        i
+      </div>
+      {visible && (
+        <div style={{
+          position: 'absolute', bottom: '20px', left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border-2)',
+          borderRadius: '8px', padding: '8px 10px',
+          fontSize: '12px', color: 'var(--color-text-2)',
+          lineHeight: 1.5, width: '200px',
+          zIndex: 50, pointerEvents: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          {TOOLTIPS[label]}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface FitnessStatsProps {
   ctl: number
   atl: number
@@ -43,8 +91,10 @@ export function FitnessStats({ ctl, atl, tsb, weeklyTSS, weeklyTSSGoal, trend }:
             <div style={{
               fontSize: '11px', color: 'var(--color-text-3)', fontWeight: 500,
               textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px',
+              display: 'flex', alignItems: 'center',
             }}>
               {s.label}
+              <InfoIcon label={s.label} />
             </div>
             <div style={{
               fontFamily: 'var(--font-barlow-condensed)',
