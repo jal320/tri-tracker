@@ -1,16 +1,15 @@
-const DAYS = [
-  { label: 'Mon', swim: 22, run: 14, tss: 58 },
-  { label: 'Tue', isToday: true, swim: 18, bike: 38, tss: 95 },
-  { label: 'Wed', run: 28, tss: 42 },
-  { label: 'Thu', swim: 16, bike: 30, tss: 68 },
-  { label: 'Fri', tss: 0 },
-  { label: 'Sat', bike: 48, tss: 110 },
-  { label: 'Sun', run: 34, tss: 78 },
-]
+interface DayData {
+  label: string
+  isToday?: boolean
+  swim: number
+  bike: number
+  run: number
+  tss: number
+}
 
-export function WeeklyOverview() {
-  const max = Math.max(...DAYS.map(d => (d.swim || 0) + (d.bike || 0) + (d.run || 0)), 1)
-  const totalTss = DAYS.reduce((sum, d) => sum + (d.tss || 0), 0)
+export function WeeklyOverview({ days }: { days: DayData[] }) {
+  const max = Math.max(...days.map(d => d.swim + d.bike + d.run), 1)
+  const totalTss = days.reduce((sum, d) => sum + d.tss, 0)
 
   return (
     <div style={{
@@ -27,8 +26,8 @@ export function WeeklyOverview() {
         This week
       </div>
       <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-        {DAYS.map((day) => {
-          const total = (day.swim || 0) + (day.bike || 0) + (day.run || 0)
+        {days.map((day) => {
+          const total = day.swim + day.bike + day.run
           const swimH = day.swim ? (day.swim / max) * 48 : 0
           const bikeH = day.bike ? (day.bike / max) * 48 : 0
           const runH = day.run ? (day.run / max) * 48 : 0
@@ -50,7 +49,7 @@ export function WeeklyOverview() {
                 {total === 0 && <div style={{ width: '2px', height: '4px', background: 'var(--color-border-2)', borderRadius: '1px', marginBottom: '2px' }} />}
               </div>
               <div style={{ fontSize: '10px', color: 'var(--color-text-3)', marginTop: '3px' }}>
-                {day.tss ? day.tss : '—'}
+                {day.tss > 0 ? day.tss : '—'}
               </div>
             </div>
           )
