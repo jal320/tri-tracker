@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { estimateTSS } from '@/lib/tss'
+import { calculateFitness, getLatestFitness, getTrend } from '@/lib/fitness'
 import { RaceBanner } from '@/components/dashboard/race-banner'
 import { TodaysPlan } from '@/components/dashboard/todays-plan'
 import { WeeklyOverview } from '@/components/dashboard/weekly-overview'
@@ -12,7 +13,8 @@ function getWeekStart() {
   const now = new Date()
   const day = now.getDay()
   const diff = now.getDate() - day + (day === 0 ? -6 : 1)
-  const monday = new Date(now.setDate(diff))
+  const monday = new Date(now)
+  monday.setDate(diff)
   monday.setHours(0, 0, 0, 0)
   return monday
 }
@@ -23,7 +25,11 @@ export default async function DashboardPage() {
 
   const weekStart = getWeekStart()
 
-  const [{ data: activities }, { data: weekActivities }] = await Promise.all([
+  const [
+    { data: recentActivities },
+    { data: weekActivities },
+    { data: allActivities },
+  ] = await Promise.all([
     supabase
       .from('strava_activities')
       .select('id, sport, name, distance_m, moving_time_s, start_time, avg_hr, suffer_score')
@@ -35,11 +41,16 @@ export default async function DashboardPage() {
       .select('sport, start_time, moving_time_s, avg_hr, suffer_score, avg_power_w, normalized_power_w')
       .eq('user_id', user!.id)
       .gte('start_time', weekStart.toISOString()),
+    supabase
+      .from('strava_activities')
+      .select('sport, start_time, moving_time_s, avg_hr, suffer_score, avg_power_w, normalized_power_w')
+      .eq('user_id', user!.id)
+      .order('start_time', { ascending: true }),
   ])
 
+  // Calculate weekly bars
   const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  const today = new Date().getDay()
-  const todayIndex = today === 0 ? 6 : today - 1
+  const todayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
 
   const days = DAY_LABELS.map((label, i) => {
     const dayActivities = (weekActivities || []).filter(a => {
@@ -47,21 +58,22 @@ export default async function DashboardPage() {
       const di = d === 0 ? 6 : d - 1
       return di === i
     })
-
     const tss = dayActivities.reduce((sum, a) => sum + estimateTSS(a), 0)
-    const swim = dayActivities.filter(a => a.sport === 'swim').reduce((s, a) => s + estimateTSS(a), 0)
-    const bike = dayActivities.filter(a => a.sport === 'bike').reduce((s, a) => s + estimateTSS(a), 0)
-    const run = dayActivities.filter(a => a.sport === 'run').reduce((s, a) => s + estimateTSS(a), 0)
-
     return {
       label,
       isToday: i === todayIndex,
-      swim: Math.round(swim),
-      bike: Math.round(bike),
-      run: Math.round(run),
+      swim: Math.round(dayActivities.filter(a => a.sport === 'swim').reduce((s, a) => s + estimateTSS(a), 0)),
+      bike: Math.round(dayActivities.filter(a => a.sport === 'bike').reduce((s, a) => s + estimateTSS(a), 0)),
+      run: Math.round(dayActivities.filter(a => a.sport === 'run').reduce((s, a) => s + estimateTSS(a), 0)),
       tss: Math.round(tss),
     }
   })
+
+  // Calculate fitness metrics
+  const snapshots = calculateFitness(allActivities || [])
+  const latest = getLatestFitness(snapshots)
+  const trend = getTrend(snapshots, 13)
+  const weeklyTSS = days.reduce((sum, d) => sum + d.tss, 0)
 
   return (
     <div>
@@ -75,10 +87,17 @@ export default async function DashboardPage() {
         <div>
           <TodaysPlan />
           <WeeklyOverview days={days} />
-          <FitnessStats />
+          <FitnessStats
+            ctl={latest.ctl}
+            atl={latest.atl}
+            tsb={latest.tsb}
+            weeklyTSS={weeklyTSS}
+            weeklyTSSGoal={400}
+            trend={trend}
+          />
         </div>
         <div>
-          <RecentActivities activities={activities || []} />
+          <RecentActivities activities={recentActivities || []} />
           <Leaderboard />
           <TriCoachNudge />
         </div>

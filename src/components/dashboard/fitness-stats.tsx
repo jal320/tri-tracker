@@ -1,11 +1,24 @@
-export function FitnessStats() {
+interface FitnessStatsProps {
+  ctl: number
+  atl: number
+  tsb: number
+  weeklyTSS: number
+  weeklyTSSGoal: number
+  trend: number[]
+}
+
+export function FitnessStats({ ctl, atl, tsb, weeklyTSS, weeklyTSSGoal, trend }: FitnessStatsProps) {
+  const tsbColor = tsb >= 5 ? 'var(--color-brand)' : tsb <= -20 ? 'var(--color-run)' : 'var(--color-text-1)'
+  const tsbLabel = tsb >= 10 ? 'fresh & ready' : tsb >= 0 ? 'balanced' : tsb >= -10 ? 'light fatigue' : tsb >= -20 ? 'moderate fatigue' : 'heavy fatigue'
+
   const stats = [
-    { label: 'CTL', value: '74', delta: '+3 this week', up: true },
-    { label: 'ATL', value: '88', delta: '+12 vs CTL', up: false },
-    { label: 'TSB', value: '-14', delta: 'moderate fatigue', up: false, warn: true },
-    { label: 'Weekly TSS', value: '342', delta: 'of 451 goal', up: true },
+    { label: 'CTL', value: Math.round(ctl).toString(), delta: 'fitness', up: true },
+    { label: 'ATL', value: Math.round(atl).toString(), delta: 'fatigue', up: false },
+    { label: 'TSB', value: Math.round(tsb).toString(), delta: tsbLabel, warn: tsb <= -20, color: tsbColor },
+    { label: 'Weekly TSS', value: Math.round(weeklyTSS).toString(), delta: `of ${weeklyTSSGoal} goal`, up: weeklyTSS >= weeklyTSSGoal * 0.8 },
   ]
-  const trend = [30, 38, 45, 42, 50, 55, 60, 58, 65, 70, 68, 74, 74]
+
+  const maxTrend = Math.max(...trend, 1)
 
   return (
     <div style={{
@@ -36,13 +49,13 @@ export function FitnessStats() {
             <div style={{
               fontFamily: 'var(--font-barlow-condensed)',
               fontSize: '24px', fontWeight: 500,
-              color: s.warn ? 'var(--color-run)' : 'var(--color-text-1)',
+              color: s.color || (s.warn ? 'var(--color-run)' : 'var(--color-text-1)'),
             }}>
               {s.value}
             </div>
             <div style={{
               fontSize: '11px', marginTop: '2px',
-              color: s.warn ? 'var(--color-text-3)' : s.up ? 'var(--color-brand)' : 'var(--color-run)',
+              color: s.warn ? 'var(--color-text-3)' : s.up ? 'var(--color-brand)' : 'var(--color-text-3)',
             }}>
               {s.delta}
             </div>
@@ -53,10 +66,11 @@ export function FitnessStats() {
         {trend.map((v, i) => (
           <div key={i} style={{
             flex: 1,
-            height: `${(v / 74) * 100}%`,
+            height: `${(v / maxTrend) * 100}%`,
             background: i === trend.length - 1 ? 'var(--color-brand)' : 'var(--color-bike-light)',
             borderRadius: '2px 2px 0 0',
             opacity: i === trend.length - 1 ? 1 : 0.6,
+            minHeight: '2px',
           }} />
         ))}
       </div>
