@@ -277,12 +277,170 @@ function AddWorkoutModal({ date, userId, onClose, onSaved }: {
   )
 }
 
-function CalendarView({ year, month, planned, completed, onDayClick }: {
+function WorkoutDetailModal({ workout, type, onClose, onDeleted }: {
+  workout: PlannedWorkout | CompletedWorkout
+  type: 'planned' | 'completed'
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (!confirm('Delete this workout?')) return
+    setDeleting(true)
+    await fetch(`/api/workouts?id=${workout.id}`, { method: 'DELETE' })
+    setDeleting(false)
+    onDeleted()
+    onClose()
+  }
+
+  const isPlanned = type === 'planned'
+  const p = workout as PlannedWorkout
+  const c = workout as CompletedWorkout
+  const sport = workout.sport
+  const tss = isPlanned ? p.tss_estimate : estimateTSS(c)
+
+  const distanceM = isPlanned
+    ? (p.swim_distance_m || p.bike_distance_m || p.run_distance_m)
+    : c.distance_m
+
+  const displayDate = isPlanned
+    ? new Date(p.planned_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : new Date(c.start_time).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--color-surface)',
+        border: `1px solid ${SPORT_COLORS[sport] || 'var(--color-border)'}`,
+        borderRadius: '16px', padding: '24px',
+        width: '100%', maxWidth: '440px',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{
+                fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+                borderRadius: '20px', background: SPORT_BG[sport],
+                color: SPORT_COLORS[sport], textTransform: 'capitalize',
+              }}>
+                {sport}
+              </span>
+              {!isPlanned && (
+                <span style={{
+                  fontSize: '11px', fontWeight: 500, padding: '2px 8px',
+                  borderRadius: '20px', background: 'rgba(29,158,117,0.15)',
+                  color: '#1D9E75',
+                }}>
+                  Completed
+                </span>
+              )}
+            </div>
+            <h2 style={{
+              fontFamily: 'var(--font-barlow-condensed)',
+              fontSize: '22px', fontWeight: 700, color: 'var(--color-text-1)',
+              margin: 0,
+            }}>
+              {isPlanned ? p.title : c.name}
+            </h2>
+            <div style={{ fontSize: '13px', color: 'var(--color-text-2)', marginTop: '2px' }}>{displayDate}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--color-text-3)', fontSize: '20px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+        </div>
+
+        {/* Stats grid */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '10px', marginBottom: '16px',
+        }}>
+          {[
+            {
+              label: 'Duration',
+              value: formatDuration(isPlanned ? p.duration_s : c.moving_time_s),
+            },
+            {
+              label: 'Distance',
+              value: distanceM ? formatDistance(sport, distanceM) : '—',
+            },
+            {
+              label: 'TSS',
+              value: tss ? `~${typeof tss === 'number' ? Math.round(tss) : tss}` : '—',
+            },
+            ...(isPlanned ? [
+              {
+                label: 'Zone',
+                value: p.zone ? `Zone ${p.zone} — ${ZONE_LABELS[p.zone]}` : '—',
+              },
+            ] : [
+              {
+                label: 'Avg HR',
+                value: c.avg_hr ? `${c.avg_hr} bpm` : '—',
+              },
+              {
+                label: 'Avg Power',
+                value: c.avg_power_w ? `${c.avg_power_w}w` : '—',
+              },
+            ]),
+          ].map(stat => (
+            <div key={stat.label} style={{
+              background: 'var(--color-surface-2)',
+              borderRadius: '8px', padding: '10px 12px',
+            }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
+                {stat.label}
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-1)' }}>
+                {stat.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Description (planned only) */}
+        {isPlanned && p.description && (
+          <div style={{
+            background: 'var(--color-surface-2)', borderRadius: '8px',
+            padding: '12px 14px', marginBottom: '16px',
+            fontSize: '13px', color: 'var(--color-text-2)', lineHeight: 1.6,
+          }}>
+            {p.description}
+          </div>
+        )}
+
+        {/* Delete (planned only) */}
+        {isPlanned && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{
+              width: '100%', padding: '10px', borderRadius: '8px',
+              background: 'transparent',
+              border: '0.5px solid rgba(220,60,60,0.4)',
+              color: '#e05555', fontSize: '13px', fontWeight: 500,
+              cursor: deleting ? 'not-allowed' : 'pointer',
+              opacity: deleting ? 0.6 : 1,
+            }}
+          >
+            {deleting ? 'Deleting...' : 'Delete workout'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CalendarView({ year, month, planned, completed, onDayClick, onWorkoutClick }: {
   year: number
   month: number
   planned: PlannedWorkout[]
   completed: CompletedWorkout[]
   onDayClick: (date: string) => void
+  onWorkoutClick: (w: PlannedWorkout | CompletedWorkout, type: 'planned' | 'completed') => void
 }) {
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -349,18 +507,19 @@ function CalendarView({ year, month, planned, completed, onDayClick }: {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 {cell.planned.slice(0, 2).map(w => (
-                  <div key={w.id} style={{
+                  <div key={w.id} onClick={e => { e.stopPropagation(); onWorkoutClick(w, 'planned') }} style={{
                     fontSize: '10px', fontWeight: 500,
                     padding: '2px 5px', borderRadius: '3px',
                     background: SPORT_BG[w.sport],
                     color: SPORT_COLORS[w.sport],
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    cursor: 'pointer',
                   }}>
                     {w.title}
                   </div>
                 ))}
                 {cell.completed.slice(0, 2).map(w => (
-                  <div key={w.id} style={{
+                  <div key={w.id} onClick={e => { e.stopPropagation(); onWorkoutClick(w, 'completed') }} style={{
                     fontSize: '10px', fontWeight: 500,
                     padding: '2px 5px', borderRadius: '3px',
                     background: SPORT_BG[w.sport],
@@ -368,6 +527,7 @@ function CalendarView({ year, month, planned, completed, onDayClick }: {
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     opacity: 0.7,
                     textDecoration: 'line-through',
+                    cursor: 'pointer',
                   }}>
                     {w.name}
                   </div>
@@ -386,10 +546,11 @@ function CalendarView({ year, month, planned, completed, onDayClick }: {
   )
 }
 
-function WeekListView({ planned, completed, onDayClick }: {
+function WeekListView({ planned, completed, onDayClick, onWorkoutClick }: {
   planned: PlannedWorkout[]
   completed: CompletedWorkout[]
   onDayClick: (date: string) => void
+  onWorkoutClick: (w: PlannedWorkout | CompletedWorkout, type: 'planned' | 'completed') => void
 }) {
   const today = new Date()
   const weekStart = new Date(today)
@@ -444,11 +605,12 @@ function WeekListView({ planned, completed, onDayClick }: {
           {(day.planned.length > 0 || day.completed.length > 0) ? (
             <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {day.planned.map(w => (
-                <div key={w.id} style={{
+                <div key={w.id} onClick={() => onWorkoutClick(w, 'planned')} style={{
                   display: 'flex', alignItems: 'center', gap: '10px',
                   padding: '8px 10px', borderRadius: '6px',
                   background: SPORT_BG[w.sport],
                   border: `0.5px solid ${SPORT_COLORS[w.sport]}`,
+                  cursor: 'pointer',
                 }}>
                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: SPORT_COLORS[w.sport], flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
@@ -471,12 +633,13 @@ function WeekListView({ planned, completed, onDayClick }: {
               {day.completed.map(w => {
                 const tss = estimateTSS(w)
                 return (
-                  <div key={w.id} style={{
+                  <div key={w.id} onClick={() => onWorkoutClick(w, 'completed')} style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
                     padding: '8px 10px', borderRadius: '6px',
                     background: 'var(--color-surface-2)',
                     border: '0.5px solid var(--color-border)',
                     opacity: 0.8,
+                    cursor: 'pointer',
                   }}>
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: SPORT_COLORS[w.sport], flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
@@ -519,6 +682,7 @@ export function TrainingClient({ plannedWorkouts, completedWorkouts, userId }: {
   const [addDate, setAddDate] = useState<string | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [workouts, setWorkouts] = useState(plannedWorkouts)
+  const [selectedWorkout, setSelectedWorkout] = useState<{ w: PlannedWorkout | CompletedWorkout; type: 'planned' | 'completed' } | null>(null)
 
   const monthLabel = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
@@ -619,12 +783,14 @@ export function TrainingClient({ plannedWorkouts, completedWorkouts, userId }: {
           planned={workouts}
           completed={completedWorkouts}
           onDayClick={setAddDate}
+          onWorkoutClick={(w, type) => setSelectedWorkout({ w, type })}
         />
       ) : (
         <WeekListView
           planned={workouts}
           completed={completedWorkouts}
           onDayClick={setAddDate}
+          onWorkoutClick={(w, type) => setSelectedWorkout({ w, type })}
         />
       )}
 
@@ -644,6 +810,15 @@ export function TrainingClient({ plannedWorkouts, completedWorkouts, userId }: {
             setShowImport(false)
             await handleSaved()
           }}
+        />
+      )}
+
+      {selectedWorkout && (
+        <WorkoutDetailModal
+          workout={selectedWorkout.w}
+          type={selectedWorkout.type}
+          onClose={() => setSelectedWorkout(null)}
+          onDeleted={handleSaved}
         />
       )}
     </div>
