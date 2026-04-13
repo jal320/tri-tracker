@@ -2,6 +2,49 @@
 
 import { useState } from 'react'
 
+const TOOLTIPS: Record<string, string> = {
+  CTL:         'Chronic Training Load — your long-term fitness built over ~42 days. Higher means more fit.',
+  ATL:         'Acute Training Load — short-term fatigue from the last ~7 days. Higher means more tired.',
+  TSB:         'Training Stress Balance — CTL minus ATL. Positive = fresh and ready. Negative = fatigued.',
+  'Today TSS': 'Training Stress Score for today — the total load from all activities completed today.',
+}
+
+function InfoIcon({ label }: { label: string }) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', marginLeft: '5px' }}>
+      <div
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        style={{
+          width: '14px', height: '14px', borderRadius: '50%',
+          border: '1px solid var(--color-text-3)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '9px', fontWeight: 600, color: 'var(--color-text-3)',
+          cursor: 'default', lineHeight: 1, verticalAlign: 'middle',
+        }}
+      >
+        i
+      </div>
+      {visible && (
+        <div style={{
+          position: 'absolute', bottom: '20px', left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border-2)',
+          borderRadius: '8px', padding: '8px 10px',
+          fontSize: '12px', color: 'var(--color-text-2)',
+          lineHeight: 1.5, width: '200px',
+          zIndex: 50, pointerEvents: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          {TOOLTIPS[label]}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Snapshot {
   date: string
   ctl: number
@@ -24,7 +67,7 @@ interface ZoneData {
   pct: number
 }
 
-const ZONE_COLORS = ['#378ADD', '#1D9E75', '#EF9F27', '#D85A30', '#E24B4A']
+const ZONE_COLORS = ['var(--color-swim)', 'var(--color-bike)', '#EF9F27', 'var(--color-run)', 'var(--color-danger)']
 const ZONE_LABELS = ['Zone 1 · Recovery', 'Zone 2 · Aerobic', 'Zone 3 · Tempo', 'Zone 4 · Threshold', 'Zone 5 · VO2 Max']
 
 export function FitnessClient({ snapshots, weeks, zoneData }: {
@@ -38,7 +81,7 @@ export function FitnessClient({ snapshots, weeks, zoneData }: {
   const maxCTL = Math.max(...snapshots.map(s => s.ctl), 1)
   const maxWeekTSS = Math.max(...weeks.map(w => w.total), 1)
 
-  const tsbColor = latest.tsb >= 5 ? '#1D9E75' : latest.tsb <= -20 ? '#E24B4A' : 'var(--color-text-1)'
+  const tsbColor = latest.tsb >= 5 ? 'var(--color-brand)' : latest.tsb <= -20 ? 'var(--color-danger)' : 'var(--color-text-1)'
   const tsbLabel = latest.tsb >= 10 ? 'Fresh & ready' : latest.tsb >= 0 ? 'Balanced' : latest.tsb >= -10 ? 'Light fatigue' : latest.tsb >= -20 ? 'Moderate fatigue' : 'Heavy fatigue'
 
   return (
@@ -64,8 +107,9 @@ export function FitnessClient({ snapshots, weeks, zoneData }: {
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px', padding: '16px',
           }}>
-            <div style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-3)', marginBottom: '6px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-3)', marginBottom: '6px', display: 'flex', alignItems: 'center' }}>
               {s.label}
+              <InfoIcon label={s.label} />
             </div>
             <div style={{ fontFamily: 'var(--font-barlow-condensed)', fontSize: '32px', fontWeight: 700, color: s.color, lineHeight: 1 }}>
               {s.value}
@@ -87,9 +131,9 @@ export function FitnessClient({ snapshots, weeks, zoneData }: {
           </div>
           <div style={{ display: 'flex', gap: '14px' }}>
             {[
-              { label: 'CTL', color: '#1D9E75' },
-              { label: 'ATL', color: '#378ADD' },
-              { label: 'TSB', color: '#D85A30' },
+              { label: 'CTL', color: 'var(--color-brand)' },
+              { label: 'ATL', color: 'var(--color-swim)' },
+              { label: 'TSB', color: 'var(--color-run)' },
             ].map(l => (
               <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--color-text-2)' }}>
                 <div style={{ width: '10px', height: '3px', borderRadius: '2px', background: l.color }} />
@@ -107,19 +151,19 @@ export function FitnessClient({ snapshots, weeks, zoneData }: {
             {/* TSB area */}
             <polyline
               points={snapshots.map((s, i) => `${i},${70 - (s.tsb / maxCTL) * 60}`).join(' ')}
-              fill="none" stroke="#D85A30" strokeWidth="1" opacity="0.6"
+              fill="none" stroke="var(--color-run)" strokeWidth="1" opacity="0.6"
             />
 
             {/* ATL line */}
             <polyline
               points={snapshots.map((s, i) => `${i},${140 - (s.atl / maxCTL) * 130}`).join(' ')}
-              fill="none" stroke="#378ADD" strokeWidth="1.5" opacity="0.7"
+              fill="none" stroke="var(--color-swim)" strokeWidth="1.5" opacity="0.7"
             />
 
             {/* CTL line */}
             <polyline
               points={snapshots.map((s, i) => `${i},${140 - (s.ctl / maxCTL) * 130}`).join(' ')}
-              fill="none" stroke="#1D9E75" strokeWidth="2"
+              fill="none" stroke="var(--color-brand)" strokeWidth="2"
             />
           </svg>
         </div>
@@ -148,9 +192,9 @@ export function FitnessClient({ snapshots, weeks, zoneData }: {
               const isLast = i === weeks.length - 1
               return (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: '1px', height: '80px' }}>
-                  {swimH > 0 && <div style={{ width: '100%', height: `${swimH}px`, background: '#378ADD', borderRadius: '2px 2px 0 0', opacity: isLast ? 1 : 0.7 }} />}
-                  {bikeH > 0 && <div style={{ width: '100%', height: `${bikeH}px`, background: '#1D9E75', opacity: isLast ? 1 : 0.7 }} />}
-                  {runH > 0 && <div style={{ width: '100%', height: `${runH}px`, background: '#D85A30', borderRadius: w.swim === 0 && w.bike === 0 ? '2px 2px 0 0' : '0', opacity: isLast ? 1 : 0.7 }} />}
+                  {swimH > 0 && <div style={{ width: '100%', height: `${swimH}px`, background: 'var(--color-swim)', borderRadius: '2px 2px 0 0', opacity: isLast ? 1 : 0.7 }} />}
+                  {bikeH > 0 && <div style={{ width: '100%', height: `${bikeH}px`, background: 'var(--color-bike)', opacity: isLast ? 1 : 0.7 }} />}
+                  {runH > 0 && <div style={{ width: '100%', height: `${runH}px`, background: 'var(--color-run)', borderRadius: w.swim === 0 && w.bike === 0 ? '2px 2px 0 0' : '0', opacity: isLast ? 1 : 0.7 }} />}
                   {w.total === 0 && <div style={{ width: '2px', height: '2px', background: 'var(--color-border-2)' }} />}
                 </div>
               )

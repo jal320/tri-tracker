@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { estimateTSS } from '@/lib/tss'
+import { ImportModal } from './import-modal'
 
 interface PlannedWorkout {
   id: string
@@ -516,6 +517,7 @@ export function TrainingClient({ plannedWorkouts, completedWorkouts, userId }: {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
   const [addDate, setAddDate] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
   const [workouts, setWorkouts] = useState(plannedWorkouts)
 
   const monthLabel = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -562,6 +564,17 @@ export function TrainingClient({ plannedWorkouts, completedWorkouts, userId }: {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setShowImport(true)}
+            style={{
+              padding: '8px 14px', borderRadius: '8px',
+              background: 'transparent',
+              border: '0.5px solid var(--color-border-2)',
+              color: 'var(--color-text-2)', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            ⬆ Import
+          </button>
           <button
             onClick={() => setAddDate(new Date().toISOString().split('T')[0])}
             style={{
@@ -621,6 +634,16 @@ export function TrainingClient({ plannedWorkouts, completedWorkouts, userId }: {
           userId={userId}
           onClose={() => setAddDate(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onImported={async () => {
+            setShowImport(false)
+            await handleSaved()
+          }}
         />
       )}
     </div>

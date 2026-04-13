@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Race {
   id: string
@@ -39,9 +39,10 @@ function pad(n: number) { return String(n).padStart(2, '0') }
 function Countdown({ raceDate }: { raceDate: string }) {
   const [tick, setTick] = useState(0)
 
-  if (typeof window !== 'undefined') {
-    setTimeout(() => setTick(t => t + 1), 1000)
-  }
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const diff = new Date(raceDate).getTime() - Date.now()
   if (diff <= 0) return <span style={{ color: 'var(--color-brand)', fontWeight: 500 }}>Race day!</span>
@@ -131,6 +132,37 @@ function AddRaceModal({ onClose, userId }: { onClose: () => void; userId: string
     goal_finish_time_s: '',
   })
   const [saving, setSaving] = useState(false)
+  const [raceUrl, setRaceUrl] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+
+  async function handleParse() {
+    if (!raceUrl) return
+    setParsing(true)
+    setParseError(null)
+    try {
+      const res = await fetch('/api/races/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: raceUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setParseError(data.error || 'Could not parse race details')
+      } else {
+        setForm(f => ({
+          ...f,
+          name:          data.name          || f.name,
+          location:      data.location      || f.location,
+          race_date:     data.race_date     || f.race_date,
+          distance_type: data.distance_type || f.distance_type,
+        }))
+      }
+    } catch {
+      setParseError('Failed to reach the server')
+    }
+    setParsing(false)
+  }
 
   async function handleSave() {
     if (!form.name || !form.race_date) return
@@ -181,6 +213,57 @@ function AddRaceModal({ onClose, userId }: { onClose: () => void; userId: string
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {/* URL import */}
+          <div style={{
+            background: 'var(--color-surface-2)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '10px', padding: '12px 14px',
+          }}>
+            <div style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-3)', marginBottom: '8px' }}>
+              Import from URL
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="url"
+                placeholder="https://ironman.com/en-us/events/..."
+                value={raceUrl}
+                onChange={e => { setRaceUrl(e.target.value); setParseError(null) }}
+                onKeyDown={e => e.key === 'Enter' && handleParse()}
+                style={{
+                  flex: 1, padding: '7px 10px', borderRadius: '7px',
+                  border: '0.5px solid var(--color-border-2)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-1)', fontSize: '13px',
+                }}
+              />
+              <button
+                onClick={handleParse}
+                disabled={parsing || !raceUrl}
+                style={{
+                  padding: '7px 14px', borderRadius: '7px',
+                  background: 'var(--color-brand)', border: 'none',
+                  color: '#fff', fontSize: '13px', fontWeight: 500,
+                  cursor: parsing || !raceUrl ? 'not-allowed' : 'pointer',
+                  opacity: parsing || !raceUrl ? 0.6 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                {parsing ? 'Parsing…' : 'Parse'}
+              </button>
+            </div>
+            {parseError && (
+              <div style={{ fontSize: '12px', color: 'var(--color-run)', marginTop: '6px' }}>
+                {parseError}
+              </div>
+            )}
+            {!parseError && !parsing && form.name && raceUrl && (
+              <div style={{ fontSize: '12px', color: 'var(--color-brand)', marginTop: '6px' }}>
+                Details filled in below — review and save.
+              </div>
+            )}
+          </div>
+
           {[
             { label: 'Race name', key: 'name', placeholder: 'Patriot Half' },
             { label: 'Location', key: 'location', placeholder: 'East Freetown, MA' },
@@ -257,10 +340,28 @@ function AddRaceModal({ onClose, userId }: { onClose: () => void; userId: string
 
 export function RacesClient({ races, userId }: { races: Race[]; userId: string }) {
   const [showAdd, setShowAdd] = useState(false)
+  const [raceList, setRaceList] = useState<Race[]>(races)
   const [selected, setSelected] = useState<Race | null>(races[0] || null)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const upcoming = races.filter(r => new Date(r.race_date + 'T12:00:00') >= new Date())
-  const past = races.filter(r => new Date(r.race_date + 'T12:00:00') < new Date())
+  async function handleDelete(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (confirmingId !== id) {
+      setConfirmingId(id)
+      setTimeout(() => setConfirmingId(c => c === id ? null : c), 3000)
+      return
+    }
+    setDeletingId(id)
+    setConfirmingId(null)
+    await fetch(`/api/races/${id}`, { method: 'DELETE' })
+    setRaceList(prev => prev.filter(r => r.id !== id))
+    if (selected?.id === id) setSelected(null)
+    setDeletingId(null)
+  }
+
+  const upcoming = raceList.filter(r => new Date(r.race_date + 'T12:00:00') >= new Date())
+  const past = raceList.filter(r => new Date(r.race_date + 'T12:00:00') < new Date())
 
   const splits = selected ? [
     { label: 'Swim', goal: selected.goal_swim_s, projected: selected.projected_swim_s, color: 'var(--color-swim)' },
@@ -305,6 +406,8 @@ export function RacesClient({ races, userId }: { races: Race[]; userId: string }
                 {upcoming.map(r => {
                   const daysOut = Math.ceil((new Date(r.race_date + 'T12:00:00').getTime() - Date.now()) / 86400000)
                   const isSelected = selected?.id === r.id
+                  const isConfirming = confirmingId === r.id
+                  const isDeleting = deletingId === r.id
                   return (
                     <div
                       key={r.id}
@@ -313,10 +416,29 @@ export function RacesClient({ races, userId }: { races: Race[]; userId: string }
                         background: isSelected ? 'var(--color-bike-light)' : 'var(--color-surface)',
                         border: isSelected ? '0.5px solid var(--color-brand)' : '0.5px solid var(--color-border)',
                         borderRadius: '10px', padding: '12px 14px', cursor: 'pointer',
+                        opacity: isDeleting ? 0.4 : 1,
                       }}
                     >
-                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-text-1)', marginBottom: '3px' }}>
-                        {r.name}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-text-1)' }}>
+                          {r.name}
+                        </div>
+                        <button
+                          onClick={e => handleDelete(r.id, e)}
+                          disabled={isDeleting}
+                          style={{
+                            background: isConfirming ? 'var(--color-run-light)' : 'transparent',
+                            border: isConfirming ? '0.5px solid var(--color-run)' : 'none',
+                            color: isConfirming ? 'var(--color-run)' : 'var(--color-text-3)',
+                            fontSize: isConfirming ? '10px' : '14px',
+                            fontWeight: 500, cursor: 'pointer',
+                            borderRadius: '4px',
+                            padding: isConfirming ? '1px 6px' : '0 2px',
+                            lineHeight: 1, flexShrink: 0, marginLeft: '6px',
+                          }}
+                        >
+                          {isConfirming ? 'Sure?' : '×'}
+                        </button>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--color-text-2)', marginBottom: '6px' }}>
                         {r.location} · {new Date(r.race_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -349,25 +471,47 @@ export function RacesClient({ races, userId }: { races: Race[]; userId: string }
                 Past
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {past.map(r => (
-                  <div
-                    key={r.id}
-                    onClick={() => setSelected(r)}
-                    style={{
-                      background: selected?.id === r.id ? 'var(--color-surface-2)' : 'var(--color-surface)',
-                      border: '0.5px solid var(--color-border)',
-                      borderRadius: '10px', padding: '12px 14px', cursor: 'pointer',
-                      opacity: 0.7,
-                    }}
-                  >
-                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-text-1)', marginBottom: '3px' }}>
-                      {r.name}
+                {past.map(r => {
+                  const isConfirming = confirmingId === r.id
+                  const isDeleting = deletingId === r.id
+                  return (
+                    <div
+                      key={r.id}
+                      onClick={() => setSelected(r)}
+                      style={{
+                        background: selected?.id === r.id ? 'var(--color-surface-2)' : 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '10px', padding: '12px 14px', cursor: 'pointer',
+                        opacity: isDeleting ? 0.4 : 0.7,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-text-1)' }}>
+                          {r.name}
+                        </div>
+                        <button
+                          onClick={e => handleDelete(r.id, e)}
+                          disabled={isDeleting}
+                          style={{
+                            background: isConfirming ? 'var(--color-run-light)' : 'transparent',
+                            border: isConfirming ? '0.5px solid var(--color-run)' : 'none',
+                            color: isConfirming ? 'var(--color-run)' : 'var(--color-text-3)',
+                            fontSize: isConfirming ? '10px' : '14px',
+                            fontWeight: 500, cursor: 'pointer',
+                            borderRadius: '4px',
+                            padding: isConfirming ? '1px 6px' : '0 2px',
+                            lineHeight: 1, flexShrink: 0, marginLeft: '6px',
+                          }}
+                        >
+                          {isConfirming ? 'Sure?' : '×'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-2)' }}>
+                        {r.location} · {new Date(r.race_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-2)' }}>
-                      {r.location} · {new Date(r.race_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </>
           )}

@@ -7,7 +7,6 @@ import { WeeklyOverview } from '@/components/dashboard/weekly-overview'
 import { FitnessStats } from '@/components/dashboard/fitness-stats'
 import { RecentActivities } from '@/components/dashboard/recent-activities'
 import { Leaderboard } from '@/components/dashboard/leaderboard'
-import { TriCoachNudge } from '@/components/dashboard/tri-coach-nudge'
 
 function getWeekStart() {
   const now = new Date()
@@ -25,10 +24,16 @@ export default async function DashboardPage() {
 
   const weekStart = getWeekStart()
 
+  const today = new Date().toISOString().split('T')[0]
+
   const [
     { data: recentActivities },
     { data: weekActivities },
     { data: allActivities },
+    { data: nextRace },
+    { data: todayWorkouts },
+    { data: members },
+    { data: allWeekActivities },
   ] = await Promise.all([
     supabase
       .from('strava_activities')
@@ -46,6 +51,28 @@ export default async function DashboardPage() {
       .select('sport, start_time, moving_time_s, avg_hr, suffer_score, avg_power_w, normalized_power_w')
       .eq('user_id', user!.id)
       .order('start_time', { ascending: true }),
+    supabase
+      .from('races')
+      .select('name, location, race_date, distance_type')
+      .eq('created_by', user!.id)
+      .gte('race_date', today)
+      .order('race_date', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('planned_workouts')
+      .select('sport, title, duration_s, zone, tss_estimate, swim_distance_m, bike_distance_m, run_distance_m')
+      .eq('user_id', user!.id)
+      .eq('planned_date', today)
+      .order('sport'),
+    supabase
+      .from('profiles')
+      .select('id, full_name, email'),
+    supabase
+      .from('strava_activities')
+      .select('user_id, sport, moving_time_s, suffer_score, avg_hr, avg_power_w, normalized_power_w')
+      .gte('start_time', weekStart.toISOString())
+      .limit(500),
   ])
 
   // Calculate weekly bars
@@ -75,9 +102,19 @@ export default async function DashboardPage() {
   const trend = getTrend(snapshots, 13)
   const weeklyTSS = days.reduce((sum, d) => sum + d.tss, 0)
 
+  // Leaderboard: weekly TSS per member
+  const leaderboardEntries = (members || [])
+    .map(m => {
+      const acts = (allWeekActivities || []).filter(a => a.user_id === m.id)
+      const tss = Math.round(acts.reduce((sum, a) => sum + estimateTSS(a), 0))
+      const name = m.full_name || m.email?.split('@')[0] || 'Athlete'
+      return { name, tss, isMe: m.id === user!.id }
+    })
+    .sort((a, b) => b.tss - a.tss)
+
   return (
     <div>
-      <RaceBanner />
+      <RaceBanner race={nextRace ?? null} />
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 300px',
@@ -85,7 +122,7 @@ export default async function DashboardPage() {
         alignItems: 'start',
       }}>
         <div>
-          <TodaysPlan />
+          <TodaysPlan workouts={todayWorkouts || []} />
           <WeeklyOverview days={days} />
           <FitnessStats
             ctl={latest.ctl}
@@ -98,8 +135,7 @@ export default async function DashboardPage() {
         </div>
         <div>
           <RecentActivities activities={recentActivities || []} />
-          <Leaderboard />
-          <TriCoachNudge />
+          <Leaderboard entries={leaderboardEntries} />
         </div>
       </div>
     </div>

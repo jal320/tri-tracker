@@ -6,7 +6,7 @@
 export function estimateTSS(activity: {
   moving_time_s: number | null
   avg_hr: number | null
-  max_hr: number | null
+  max_hr?: number | null
   suffer_score: number | null
   avg_power_w: number | null
   normalized_power_w: number | null

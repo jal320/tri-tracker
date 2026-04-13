@@ -6,7 +6,7 @@ interface Activity {
   moving_time_s: number | null
   start_time: string
   avg_hr: number | null
-  tss: number | null
+  tss?: number | null
   suffer_score: number | null
 }
 

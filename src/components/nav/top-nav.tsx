@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { label: 'Community', href: '/community' },
 ]
 
-export function TopNav({ userEmail }: { userEmail?: string }) {
+export function TopNav({ userEmail, isAdmin }: { userEmail?: string; isAdmin?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -67,8 +67,8 @@ export function TopNav({ userEmail }: { userEmail?: string }) {
           </span>
         </Link>
 
-        <div style={{ display: 'flex', gap: '2px', flex: 1 }}>
-          {NAV_ITEMS.map(item => {
+        <div className="desktop-nav" style={{ gap: '2px', flex: 1 }}>
+          {[...NAV_ITEMS, ...(isAdmin ? [{ label: 'Admin', href: '/admin' }] : [])].map(item => {
             const active = pathname === item.href ||
               (item.href !== '/' && pathname.startsWith(item.href))
             return (
@@ -86,8 +86,24 @@ export function TopNav({ userEmail }: { userEmail?: string }) {
             )
           })}
         </div>
+        <div style={{ flex: 1 }} className="mobile-menu-btn" />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setMenuOpen(v => !v)}
+            style={{
+              width: '30px', height: '30px',
+              borderRadius: '6px',
+              border: '0.5px solid var(--color-border)',
+              background: 'transparent',
+              color: 'var(--color-text-2)',
+              cursor: 'pointer', fontSize: '16px',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {menuOpen ? '✕' : '☰'}
+          </button>
           <button onClick={cycleTheme} style={{
             width: '30px',
             height: '30px',
@@ -149,7 +165,7 @@ export function TopNav({ userEmail }: { userEmail?: string }) {
           flexDirection: 'column',
           gap: '4px',
         }}>
-          {NAV_ITEMS.map(item => (
+          {[...NAV_ITEMS, ...(isAdmin ? [{ label: 'Admin', href: '/admin' }] : [])].map(item => (
             <Link key={item.href} href={item.href}
               onClick={() => setMenuOpen(false)}
               style={{

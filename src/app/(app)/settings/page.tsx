@@ -1,7 +1,8 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useTheme } from '@/components/providers/theme-provider'
 
 function SettingsContent() {
   const searchParams = useSearchParams()
@@ -9,6 +10,75 @@ function SettingsContent() {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+
+  const { theme, setTheme } = useTheme()
+  const [units, setUnits] = useState<'imperial' | 'metric'>('imperial')
+
+  const [profile, setProfile] = useState({ full_name: '', height: '', weight: '', max_hr: '', ftp_watts: '' })
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings/profile')
+      .then(r => r.json())
+      .then(d => {
+        if (d.full_name !== undefined) setProfile({
+          full_name: d.full_name || '',
+          height:    d.height_cm  ? String(Math.round(d.height_cm / 2.54))     : '',
+          weight:    d.weight_kg  ? String(Math.round(d.weight_kg / 0.453592)) : '',
+          max_hr:    d.max_hr     ? String(d.max_hr)    : '',
+          ftp_watts: d.ftp_watts  ? String(d.ftp_watts) : '',
+        })
+      })
+      .catch(() => {})
+  }, [])
+
+  async function saveProfile() {
+    setProfileSaving(true)
+    setProfileSaved(false)
+    await fetch('/api/settings/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    })
+    setProfileSaving(false)
+    setProfileSaved(true)
+    setTimeout(() => setProfileSaved(false), 2000)
+  }
+  const [appearanceSaving, setAppearanceSaving] = useState(false)
+  const [appearanceSaved, setAppearanceSaved] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings/appearance')
+      .then(r => r.json())
+      .then(d => {
+        if (d.units) setUnits(d.units)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function saveAppearance(nextTheme: typeof theme, nextUnits: typeof units) {
+    setAppearanceSaving(true)
+    setAppearanceSaved(false)
+    await fetch('/api/settings/appearance', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: nextTheme, units: nextUnits }),
+    })
+    setAppearanceSaving(false)
+    setAppearanceSaved(true)
+    setTimeout(() => setAppearanceSaved(false), 2000)
+  }
+
+  function handleTheme(t: typeof theme) {
+    setTheme(t)
+    saveAppearance(t, units)
+  }
+
+  function handleUnits(u: typeof units) {
+    setUnits(u)
+    saveAppearance(theme, u)
+  }
 
   const success = searchParams.get('success')
   const error = searchParams.get('error')
@@ -65,14 +135,13 @@ function SettingsContent() {
       {activeTab === 'profile' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {[
-            { label: 'Full name', placeholder: 'Jake Lansberry', type: 'text' },
-            { label: 'Height', placeholder: '5\'10"', type: 'text' },
-            { label: 'Weight', placeholder: '165 lbs', type: 'text' },
-            { label: 'Max heart rate', placeholder: '185 bpm', type: 'number' },
-            { label: 'FTP (watts)', placeholder: '280', type: 'number' },
-            { label: 'Threshold pace', placeholder: '7:30 /mi', type: 'text' },
+            { label: 'Full name',       key: 'full_name',       placeholder: 'Jake Lansberry', type: 'text' },
+            { label: 'Height (inches)', key: 'height',          placeholder: '70',             type: 'number' },
+            { label: 'Weight (lbs)',    key: 'weight',          placeholder: '165',            type: 'number' },
+            { label: 'Max heart rate',  key: 'max_hr',          placeholder: '185',            type: 'number' },
+            { label: 'FTP (watts)',     key: 'ftp_watts',       placeholder: '280',            type: 'number' },
           ].map(field => (
-            <div key={field.label}>
+            <div key={field.key}>
               <label style={{
                 display: 'block', fontSize: '12px', fontWeight: 500,
                 color: 'var(--color-text-2)', marginBottom: '6px',
@@ -80,23 +149,39 @@ function SettingsContent() {
               }}>
                 {field.label}
               </label>
-              <input type={field.type} placeholder={field.placeholder} style={{
-                width: '100%', padding: '8px 12px',
-                background: 'var(--color-surface)',
-                border: '0.5px solid var(--color-border-2)',
-                borderRadius: '8px', fontSize: '14px',
-                color: 'var(--color-text-1)',
-              }} />
+              <input
+                type={field.type}
+                placeholder={field.placeholder}
+                value={(profile as any)[field.key]}
+                onChange={e => setProfile(p => ({ ...p, [field.key]: e.target.value }))}
+                style={{
+                  width: '100%', padding: '8px 12px',
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border-2)',
+                  borderRadius: '8px', fontSize: '14px',
+                  color: 'var(--color-text-1)',
+                }}
+              />
             </div>
           ))}
-          <button style={{
-            padding: '10px 20px', borderRadius: '8px',
-            background: 'var(--color-brand)', border: 'none',
-            color: '#fff', fontSize: '14px', fontWeight: 500,
-            cursor: 'pointer', alignSelf: 'flex-start',
-          }}>
-            Save profile
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={saveProfile}
+              disabled={profileSaving}
+              style={{
+                padding: '10px 20px', borderRadius: '8px',
+                background: 'var(--color-brand)', border: 'none',
+                color: '#fff', fontSize: '14px', fontWeight: 500,
+                cursor: profileSaving ? 'not-allowed' : 'pointer',
+                opacity: profileSaving ? 0.6 : 1,
+              }}
+            >
+              {profileSaving ? 'Saving…' : 'Save profile'}
+            </button>
+            {profileSaved && (
+              <span style={{ fontSize: '13px', color: 'var(--color-brand)' }}>Saved</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -214,12 +299,14 @@ function SettingsContent() {
               Theme
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              {['light', 'dark', 'system'].map(t => (
-                <button key={t} style={{
+              {(['light', 'dark', 'system'] as const).map(t => (
+                <button key={t} onClick={() => handleTheme(t)} style={{
                   padding: '8px 16px', borderRadius: '8px',
-                  border: '0.5px solid var(--color-border-2)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text-1)',
+                  border: theme === t
+                    ? '0.5px solid var(--color-brand)'
+                    : '0.5px solid var(--color-border-2)',
+                  background: theme === t ? 'var(--color-bike-light)' : 'var(--color-surface)',
+                  color: theme === t ? 'var(--color-brand)' : 'var(--color-text-1)',
                   fontSize: '13px', fontWeight: 500,
                   cursor: 'pointer', textTransform: 'capitalize',
                 }}>
@@ -237,20 +324,34 @@ function SettingsContent() {
               Units
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              {['Imperial (mi, lbs, °F)', 'Metric (km, kg, °C)'].map(u => (
-                <button key={u} style={{
+              {([
+                { value: 'imperial', label: 'Imperial (mi, lbs, °F)' },
+                { value: 'metric',   label: 'Metric (km, kg, °C)' },
+              ] as const).map(u => (
+                <button key={u.value} onClick={() => handleUnits(u.value)} style={{
                   padding: '8px 16px', borderRadius: '8px',
-                  border: '0.5px solid var(--color-border-2)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text-1)',
+                  border: units === u.value
+                    ? '0.5px solid var(--color-brand)'
+                    : '0.5px solid var(--color-border-2)',
+                  background: units === u.value ? 'var(--color-bike-light)' : 'var(--color-surface)',
+                  color: units === u.value ? 'var(--color-brand)' : 'var(--color-text-1)',
                   fontSize: '13px', fontWeight: 500,
                   cursor: 'pointer',
                 }}>
-                  {u}
+                  {u.label}
                 </button>
               ))}
             </div>
           </div>
+
+          {(appearanceSaving || appearanceSaved) && (
+            <div style={{
+              fontSize: '13px',
+              color: appearanceSaved ? 'var(--color-brand)' : 'var(--color-text-2)',
+            }}>
+              {appearanceSaving ? 'Saving…' : 'Saved'}
+            </div>
+          )}
         </div>
       )}
     </div>
