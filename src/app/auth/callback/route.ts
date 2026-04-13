@@ -1,6 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+
+function parseRequestCookies(cookieHeader: string): Array<{ name: string; value: string }> {
+  return cookieHeader
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => {
+      const idx = s.indexOf('=')
+      return idx === -1 ? null : { name: s.slice(0, idx).trim(), value: decodeURIComponent(s.slice(idx + 1).trim()) }
+    })
+    .filter((c): c is { name: string; value: string } => c !== null)
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -8,53 +19,58 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/'
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
 
-  if (code) {
-    const cookieStore = await cookies()
+  if (!code) {
+    return NextResponse.redirect(`${siteUrl}/login?error=no_code`)
+  }
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll() },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options))
-          },
+  // Accumulate cookies that supabase wants to set
+  const pendingCookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = []
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return parseRequestCookies(request.headers.get('cookie') || '')
         },
-      }
-    )
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            pendingCookies.push({ name, value, options: options as Record<string, unknown> })
+          })
+        },
+      },
+    }
+  )
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+  const { error } = await supabase.auth.exchangeCodeForSession(code)
 
-    if (!error) {
-      const { data: { user } } = await supabase.auth.getUser()
+  if (error) {
+    return NextResponse.redirect(`${siteUrl}/login?error=exchange_failed`)
+  }
 
-      let redirectPath = next
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('onboarding_complete')
-          .eq('id', user.id)
-          .single()
+  // Determine redirect destination
+  let redirectPath = next
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_complete')
+      .eq('id', user.id)
+      .single()
 
-        if (!profile?.onboarding_complete) {
-          redirectPath = next && next !== '/'
-            ? `/onboarding?next=${encodeURIComponent(next)}`
-            : '/onboarding'
-        }
-      }
-
-      const response = NextResponse.redirect(`${siteUrl}${redirectPath}`)
-
-      // Explicitly copy all cookies (including the new session) onto the redirect response
-      cookieStore.getAll().forEach(({ name, value }) => {
-        response.cookies.set(name, value, { path: '/', sameSite: 'lax' })
-      })
-
-      return response
+    if (!profile?.onboarding_complete) {
+      redirectPath = next && next !== '/'
+        ? `/onboarding?next=${encodeURIComponent(next)}`
+        : '/onboarding'
     }
   }
 
-  return NextResponse.redirect(`${siteUrl}/login?error=auth`)
+  // Build response and apply all pending cookies directly to it
+  const response = NextResponse.redirect(`${siteUrl}${redirectPath}`)
+  pendingCookies.forEach(({ name, value, options }) => {
+    response.cookies.set(name, value, options as Parameters<typeof response.cookies.set>[2])
+  })
+
+  return response
 }
