@@ -1,19 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 
-function parseRequestCookies(cookieHeader: string): Array<{ name: string; value: string }> {
-  return cookieHeader
-    .split(';')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(s => {
-      const idx = s.indexOf('=')
-      return idx === -1 ? null : { name: s.slice(0, idx).trim(), value: decodeURIComponent(s.slice(idx + 1).trim()) }
-    })
-    .filter((c): c is { name: string; value: string } => c !== null)
-}
-
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/'
@@ -32,7 +20,8 @@ export async function GET(request: Request) {
     {
       cookies: {
         getAll() {
-          return parseRequestCookies(request.headers.get('cookie') || '')
+          // Use Next.js built-in cookie parsing (same as the proxy does)
+          return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
