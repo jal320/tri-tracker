@@ -32,6 +32,7 @@ export function OnboardingClient({ userId, email }: { userId: string; email: str
   const next = searchParams.get('next') || '/'
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const [name, setName] = useState('')
   const [raceDate, setRaceDate] = useState('')
@@ -47,12 +48,13 @@ export function OnboardingClient({ userId, email }: { userId: string; email: str
 
   async function handleFinish() {
     setSaving(true)
+    setSaveError('')
 
     const goalTimeS = goalTime
       ? parseInt(goalTime.split(':')[0]) * 3600 + parseInt(goalTime.split(':')[1] || '0') * 60
       : null
 
-    await fetch('/api/onboarding', {
+    const res = await fetch('/api/onboarding', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -75,6 +77,13 @@ export function OnboardingClient({ userId, email }: { userId: string; email: str
     })
 
     setSaving(false)
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setSaveError(data.error || 'Something went wrong. Please try again.')
+      return
+    }
+
     router.push(next)
   }
 
@@ -318,6 +327,12 @@ export function OnboardingClient({ userId, email }: { userId: string; email: str
             </div>
           )}
         </div>
+
+        {saveError && (
+          <div style={{ marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(220,60,60,0.15)', border: '0.5px solid rgba(220,60,60,0.4)', fontSize: '13px', color: '#e05555' }}>
+            {saveError}
+          </div>
+        )}
 
         {/* Navigation */}
         <div style={{ display: 'flex', gap: '10px' }}>

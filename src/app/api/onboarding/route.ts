@@ -9,13 +9,13 @@ export async function POST(request: Request) {
 
   const body = await request.json()
 
-  const adminSupabase = createAdmin(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  // Use admin client if available, otherwise fall back to regular client
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : supabase
 
   // Update profile
-  await adminSupabase
+  const { error: updateError } = await db
     .from('profiles')
     .update({
       full_name: body.name,
@@ -27,11 +27,11 @@ export async function POST(request: Request) {
     })
     .eq('id', user.id)
 
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
   // Create race if provided
   if (body.race) {
-    const goalTimeS = body.race.goal_finish_time_s
-
-    await adminSupabase
+    await db
       .from('races')
       .insert({
         created_by: user.id,
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         race_date: body.race.race_date,
         distance_type: body.race.distance_type,
         goal_type: body.race.goal_type,
-        goal_finish_time_s: goalTimeS,
+        goal_finish_time_s: body.race.goal_finish_time_s,
         is_group_race: body.race.is_group_race,
       })
   }
