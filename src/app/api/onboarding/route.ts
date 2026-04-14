@@ -9,13 +9,8 @@ export async function POST(request: Request) {
 
   const body = await request.json()
 
-  // Use admin client if available, otherwise fall back to regular client
-  const db = process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
-    : supabase
-
-  // Update profile
-  const { error: updateError } = await db
+  // Update profile using the user's own session (RLS allows users to update their own row)
+  const { error: updateError } = await supabase
     .from('profiles')
     .update({
       full_name: body.name,
@@ -27,10 +22,15 @@ export async function POST(request: Request) {
     })
     .eq('id', user.id)
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+  if (updateError) return NextResponse.json({ error: updateError.message, code: updateError.code }, { status: 500 })
 
   // Create race if provided
   if (body.race) {
+    // Try admin client first, fall back to user client
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
+      : supabase
+
     await db
       .from('races')
       .insert({
